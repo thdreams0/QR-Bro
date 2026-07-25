@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """
-qrbro — Gerador de QR Codes customizados com cores e logo no centro.
+qrbro — Custom QR code generator with colors and center logo.
 
-USO:
-    qrbro                        # Modo interativo (pergunta tudo no terminal)
-    qrbro "texto ou URL"         # Modo direto com argumentos opcionais
+USAGE:
+    qrbro                        # Interactive mode (prompts with pickers)
+    qrbro "text or URL"          # Direct mode (optional flags)
+    qrbro --help                 # Show help
 
-OPCOES (modo direto):
-    --color HEX         Cor do QR (ex: #FF5733)
-    --bg HEX            Cor de fundo (ex: #FFFFFF)
-    --logo PATH         Caminho para imagem do logo (centro)
-    --logo-size PCT     Tamanho do logo em %% do QR (def: 25)
-    --output PATH       Ficheiro de saída (def: qrcode.png)
-    --version VER       Versão do QR (1-40, def: auto)
-    --box-size N        Tamanho de cada box em px (def: 10)
-    --border N          Tamanho da borda (def: 4)
-    --error LOW/M/Q/H   Nível de correção de erro (def: H)
-    --show              Abrir a imagem depois de gerar
-    -y                  Skip confirmação (modo não-interativo)
+OPTIONS (direct mode):
+    --color HEX         QR color (default: #000000)
+    --bg HEX            Background color (default: #FFFFFF)
+    --logo PATH         Logo image path (centered)
+    --logo-size PCT     Logo size as %% of QR (default: 25)
+    --output PATH       Output file (default: ~/Downloads/qrcode.png)
+    --version VER       QR version 1-40 (default: auto)
+    --box-size N        Box size in px (default: 10)
+    --border N          Border thickness (default: 4)
+    --error L/M/Q/H     Error correction level (default: H)
+    --show              Open image after generation
+    -y                  Skip confirmation (non-interactive)
 """
 
 import argparse
@@ -28,7 +29,7 @@ try:
     import qrcode
     from PIL import Image
 except ImportError:
-    print(" Dependencias em falta. A instalar automaticamente...")
+    print(" Missing dependencies. Installing automatically...")
     import subprocess
     for cmd in [
         [sys.executable, "-m", "pip", "install", "--quiet", "qrcode[pil]", "Pillow"],
@@ -39,21 +40,20 @@ except ImportError:
         if r.returncode == 0:
             break
     else:
-        print(" ERRO: Nao foi possivel instalar dependencias.")
-        print(" Tenta manualmente: pip install qrcode[pil] Pillow")
+        print(" ERROR: Could not install dependencies.")
+        print(" Try manually: pip install qrcode[pil] Pillow")
         sys.exit(1)
 
-    # Reimportar apos instalacao
     try:
         import qrcode
         from PIL import Image
     except ImportError:
-        print(" ERRO: Falha ao importar apos instalacao.")
-        print(" Tenta manualmente: pip install qrcode[pil] Pillow")
+        print(" ERROR: Failed to import after installation.")
+        print(" Try manually: pip install qrcode[pil] Pillow")
         sys.exit(1)
 
 
-# ── Cores ANSI ──────────────────────────────────────────
+# ── ANSI Colors ──────────────────────────────────────────
 CYAN = "\033[96m"
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
@@ -68,6 +68,18 @@ LOGO = f"""{CYAN}{BOLD}
    ▐▙▄▟▌▐▙▄▟▌▐▙▄▟▌
    {DIM}qrbro — QR Code Builder{RESET}"""
 
+COLOR_PRESETS = {
+    "1": ("Classic black", "#000000", "#FFFFFF"),
+    "2": ("Night mode", "#00FF88", "#0D1117"),
+    "3": ("Royal", "#FFD700", "#1a1a2e"),
+    "4": ("Fire", "#FF5733", "#1a0a00"),
+    "5": ("Ocean", "#00BFFF", "#001830"),
+    "6": ("Neon pink", "#FF1493", "#000000"),
+    "7": ("Minimal", "#333333", "#FFFFFF"),
+    "8": ("Custom", None, None),
+}
+EC_OPTIONS = [("Low (L)", "L"), ("Medium (M)", "M"), ("Quartile (Q)", "Q"), ("High (H)", "H")]
+
 
 # ── Helpers ─────────────────────────────────────────────
 def hex_to_rgb(hex_color: str) -> tuple:
@@ -77,9 +89,49 @@ def hex_to_rgb(hex_color: str) -> tuple:
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
 
-def prompt(default: str = "", label: str = "> ") -> str:
-    val = input(f"  {DIM}{label}{RESET}")
-    return val.strip() or default
+def picker(title: str, options: list[tuple[str, str]], default: int = 0) -> str:
+    """Show a numbered picker menu. Returns the selected value."""
+    print(f"\n {BOLD}?{RESET} {title}")
+    for i, (label, _) in enumerate(options, 1):
+        indicator = f" {GREEN}→{RESET}" if i == default else "  "
+        print(f"  {indicator} {i}. {label}")
+    while True:
+        choice = input(f"  {DIM}Pick 1-{len(options)} [{default}]: {RESET}").strip()
+        if not choice:
+            return options[default - 1][1]
+        if choice.isdigit() and 1 <= int(choice) <= len(options):
+            return options[int(choice) - 1][1]
+        print(f"  {RED}Invalid. Enter 1-{len(options)}.{RESET}")
+
+
+def prompt_str(label: str, default: str = "", required: bool = False) -> str:
+    while True:
+        val = input(f"  {BOLD}?{RESET} {label} {DIM}[{default}]:{RESET} ").strip()
+        if not val:
+            if required:
+                print(f"  {RED}This field is required.{RESET}")
+                continue
+            return default
+        return val
+
+
+def prompt_hex(label: str, default: str) -> str:
+    val = input(f"  {BOLD}?{RESET} {label} {DIM}[{default}]:{RESET} ").strip()
+    if not val:
+        return default
+    return f"#{val.lstrip('#')}"
+
+
+def confirm(label: str, default: str = "y") -> bool:
+    opts = f"{'Y' if default == 'y' else 'y'}/{ 'N' if default == 'n' else 'n'}"
+    val = input(f"  {BOLD}?{RESET} {label} {DIM}[{opts}]:{RESET} ").strip().lower()
+    if not val:
+        return default == "y"
+    return val in ("y", "yes")
+
+
+def yes_no(val: bool) -> str:
+    return f"{GREEN}yes{RESET}" if val else f"{DIM}no{RESET}"
 
 
 # ── QR Generation ────────────────────────────────────────
@@ -89,13 +141,16 @@ def generate_qr(
     bg_color: str = "#FFFFFF",
     logo_path: str | None = None,
     logo_size_pct: float = 25,
-    output: str = "qrcode.png",
+    output: str = "",
     version: int | None = None,
     box_size: int = 10,
     border: int = 4,
     error_correction: str = "H",
     show: bool = False,
 ) -> str:
+
+    if not output:
+        output = os.path.expanduser("~/Downloads/qrcode.png")
 
     ec_map = {
         "L": qrcode.constants.ERROR_CORRECT_L,
@@ -106,7 +161,7 @@ def generate_qr(
     ec = ec_map.get(error_correction.upper(), qrcode.constants.ERROR_CORRECT_H)
 
     if logo_path and error_correction.upper() in ("L", "M"):
-        print(f" {YELLOW}aviso{RESET} Com logo no centro, recomenda-se nivel H ou Q de correcao de erro.")
+        print(f" {YELLOW}warning{RESET} With center logo, use H or Q error correction.")
 
     qr = qrcode.QRCode(
         version=version or None,
@@ -119,7 +174,7 @@ def generate_qr(
 
     img = qr.make_image(fill_color=color, back_color=bg_color).convert("RGBA")
 
-    # Pintar pixéis manualmente (garantir cores exatas)
+    # Force exact colors on all pixels
     pixels = img.load()
     w, h = img.size
     fill_rgb = hex_to_rgb(color)
@@ -133,7 +188,7 @@ def generate_qr(
             elif r > 200 and g > 200 and b > 200:
                 pixels[x, y] = (*back_rgb, a)
 
-    # Logo ao centro
+    # Center logo
     if logo_path and os.path.isfile(logo_path):
         try:
             logo = Image.open(logo_path).convert("RGBA")
@@ -150,88 +205,81 @@ def generate_qr(
             py = (qr_h - logo.size[1]) // 2
             img.paste(logo, (px, py), mask)
         except Exception as e:
-            print(f" {YELLOW}aviso{RESET} Erro ao processar logo: {e}")
+            print(f" {YELLOW}warning{RESET} Logo error: {e}")
 
+    os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
     img.save(output, "PNG")
     return os.path.abspath(output)
 
 
-# ── Modo Interactivo ─────────────────────────────────────
+# ── Interactive Mode ─────────────────────────────────────
+DESCRIPTION = f"""
+ {DIM}Enter the info to generate your QR code. Press Enter to accept defaults.{RESET}"""
+
+
 def interactive_mode():
     print(LOGO)
-    print(f"  {DIM}Introduz os dados para gerar o QR code. Enter = valor default.{RESET}\n")
+    print(DESCRIPTION)
 
-    # 1. Data
+    # 1. Data (required)
+    print()
     while True:
-        data = input(f" {BOLD}?{RESET} URL ou texto a codificar\n  {DIM}> {RESET}")
-        if data.strip():
+        data = prompt_str("URL or text to encode", required=True)
+        if data:
             break
-        print(f" {RED}erro{RESET} Este campo e obrigatorio.\n")
 
-    # 2. Cor do QR
-    color = input(f" {BOLD}?{RESET} Cor do QR {DIM}[#000000]{RESET}\n  {DIM}> {RESET}").strip()
-    if not color:
-        color = "#000000"
-    elif not color.startswith("#"):
-        color = f"#{color}"
+    # 2. Color preset picker
+    presets_list = [(v[0], k) for k, v in COLOR_PRESETS.items()]
+    color_choice = picker("Color scheme", presets_list, default=4)
 
-    # 3. Cor de fundo
-    bg = input(f" {BOLD}?{RESET} Cor de fundo {DIM}[#FFFFFF]{RESET}\n  {DIM}> {RESET}").strip()
-    if not bg:
-        bg = "#FFFFFF"
-    elif not bg.startswith("#"):
-        bg = f"#{bg}"
+    if color_choice == "8":  # Custom
+        color = prompt_hex("QR color", "#000000")
+        bg = prompt_hex("Background color", "#FFFFFF")
+    else:
+        preset = COLOR_PRESETS[color_choice]
+        color, bg = preset[1], preset[2]
+        print(f"  {DIM}→ {preset[0]}: QR={color}, BG={bg}{RESET}")
 
-    # 4. Logo
-    logo = input(f" {BOLD}?{RESET} Caminho do logo {DIM}[opcional, Enter para saltar]{RESET}\n  {DIM}> {RESET}").strip()
-
+    # 3. Logo
+    logo = prompt_str("Logo path (leave empty to skip)")
     logo_size = 25
     if logo:
-        sz = input(f" {BOLD}?{RESET} Tamanho do logo em % do QR {DIM}[25]{RESET}\n  {DIM}> {RESET}").strip()
-        if sz:
-            try:
-                logo_size = int(sz)
-            except ValueError:
-                print(f" {YELLOW}aviso{RESET} Valor invalido, a usar 25%.")
+        sz = prompt_str("Logo size as % of QR", "25")
+        try:
+            logo_size = int(sz)
+        except ValueError:
+            print(f"  {YELLOW}warning{RESET} Invalid size, using 25%.")
 
-    # 5. Erro
-    err_prompt = input(f" {BOLD}?{RESET} Nivel de correcao de erro {DIM}[H] — L/M/Q/H{RESET}\n  {DIM}> {RESET}").strip().upper()
-    if err_prompt not in ("L", "M", "Q", "H", ""):
-        print(f" {YELLOW}aviso{RESET} Opcao invalida, a usar H.")
-        err_prompt = "H"
-    error = err_prompt or "H"
+    # 4. Error correction picker
+    error = picker("Error correction level", EC_OPTIONS, default=4)
 
-    # 6. Output
-    out = input(f" {BOLD}?{RESET} Nome do ficheiro {DIM}[qrcode.png]{RESET}\n  {DIM}> {RESET}").strip()
-    if not out:
-        out = "qrcode.png"
+    # 5. Output (default: ~/Downloads/qrcode.png)
+    default_out = os.path.expanduser("~/Downloads/qrcode.png")
+    out = prompt_str("Output filename", default_out)
     if not out.endswith(".png"):
         out += ".png"
 
-    # 7. Mostrar imagem?
-    show_input = input(f" {BOLD}?{RESET} Abrir a imagem depois de gerar? {DIM}[s/N]{RESET}\n  {DIM}> {RESET}").strip().lower()
-    show = show_input in ("s", "sim", "yes", "y")
+    # 6. Show image?
+    show = confirm("Open image after generation?", default="n")
 
-    # ── Resumo ────────────────────────────────────────
+    # ── Summary ────────────────────────────────────────
     ec_label = {"L": "Low", "M": "Medium", "Q": "Quartile", "H": "High"}
-    print(f"\n {DIM}{'─'*40}{RESET}")
-    print(f" {BOLD}Resumo:{RESET}")
-    print(f"   Dados:     {data}")
-    print(f"   Cor QR:    {color}")
-    print(f"   Fundo:     {bg}")
-    print(f"   Logo:      {logo or '(sem logo)'}")
-    print(f"   Erro:      {ec_label.get(error, error)}")
-    print(f"   Output:    {out}")
-    if show:
-        print(f"   Abrir:     sim")
-    print(f" {DIM}{'─'*40}{RESET}")
+    print(f"\n {DIM}{'─'*44}{RESET}")
+    print(f" {BOLD}Summary:{RESET}")
+    print(f"   Data:     {data}")
+    print(f"   QR color: {color}")
+    print(f"   BG color: {bg}")
+    print(f"   Logo:     {logo or '(none)'}")
+    print(f"   Error:    {ec_label.get(error, error)}")
+    print(f"   Output:   {out}")
+    print(f"   Open:     {yes_no(show)}")
+    print(f" {DIM}{'─'*44}{RESET}")
 
-    confirm = input(f"\n {BOLD}?{RESET} Gerar QR code? {DIM}[S/n]{RESET}\n  {DIM}> {RESET}").strip().lower()
-    if confirm in ("n", "nao", "no"):
-        print(f"\n {YELLOW}Cancelado.{RESET}")
+    if not confirm("Generate QR code?", default="y"):
+        print(f"\n {YELLOW}Cancelled.{RESET}")
         sys.exit(0)
 
-    print(f"\n {DIM}A gerar QR code...{RESET}")
+    print(f"\n {DIM}Generating QR code...{RESET}")
     try:
         path = generate_qr(
             data=data,
@@ -243,16 +291,16 @@ def interactive_mode():
             error_correction=error,
             show=show,
         )
-        print(f"\n {GREEN}{BOLD}✓ QR code gerado!{RESET}")
+        print(f"\n {GREEN}{BOLD}✓ QR code generated!{RESET}")
         print(f"   {path}\n")
     except Exception as e:
-        print(f"\n {RED}erro{RESET} {e}")
+        print(f"\n {RED}error{RESET} {e}")
         sys.exit(1)
 
 
-# ── Modo Direto (argumentos) ────────────────────────────
+# ── Direct Mode ──────────────────────────────────────────
 def direct_mode(args):
-    print(f" {DIM}A gerar QR code...{RESET}")
+    print(f" {DIM}Generating QR code...{RESET}")
     try:
         path = generate_qr(
             data=args.data,
@@ -267,42 +315,45 @@ def direct_mode(args):
             error_correction=args.error,
             show=args.show,
         )
-        print(f" {GREEN}{BOLD}✓ QR code gerado!{RESET} {DIM}{path}{RESET}")
+        print(f" {GREEN}{BOLD}✓ QR code generated!{RESET} {DIM}{path}{RESET}")
     except Exception as e:
-        print(f" {RED}erro{RESET} {e}")
+        print(f" {RED}error{RESET} {e}")
         sys.exit(1)
 
 
+# ── Entrypoint ───────────────────────────────────────────
 def main():
+    default_out = os.path.expanduser("~/Downloads/qrcode.png")
+
     parser = argparse.ArgumentParser(
-        description="qrbro — Gerador de QR Codes customizados",
+        description="qrbro — Custom QR code generator",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False,
     )
-    parser.add_argument("data", nargs="?", help="Texto ou URL para codificar")
-    parser.add_argument("--color", default="#000000", help="Cor do QR (hex)")
-    parser.add_argument("--bg", default="#FFFFFF", help="Cor de fundo (hex)")
-    parser.add_argument("--logo", default=None, help="Caminho do logo (centro)")
-    parser.add_argument("--logo-size", type=float, default=25, help="Tamanho do logo em %% do QR")
-    parser.add_argument("--output", "-o", default="qrcode.png", help="Ficheiro de saida")
-    parser.add_argument("--version", type=int, default=None, help="Versao do QR (1-40)")
-    parser.add_argument("--box-size", type=int, default=10, help="Tamanho de cada box (px)")
-    parser.add_argument("--border", type=int, default=4, help="Tamanho da borda")
-    parser.add_argument("--error", default="H", choices=["L","M","Q","H"], help="Correcao de erro")
-    parser.add_argument("--show", action="store_true", help="Abrir a imagem")
-    parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmacao")
-    parser.add_argument("-h", "--help", action="store_true", help="Mostrar ajuda")
+    parser.add_argument("data", nargs="?", help="Text or URL to encode")
+    parser.add_argument("--color", default="#000000", help="QR color (hex)")
+    parser.add_argument("--bg", default="#FFFFFF", help="Background color (hex)")
+    parser.add_argument("--logo", default=None, help="Logo image path (center)")
+    parser.add_argument("--logo-size", type=float, default=25, help="Logo size as %% of QR")
+    parser.add_argument("--output", "-o", default=default_out, help="Output file")
+    parser.add_argument("--version", type=int, default=None, help="QR version (1-40)")
+    parser.add_argument("--box-size", type=int, default=10, help="Box size in px")
+    parser.add_argument("--border", type=int, default=4, help="Border thickness")
+    parser.add_argument("--error", default="H", choices=["L","M","Q","H"], help="Error correction")
+    parser.add_argument("--show", action="store_true", help="Open image after generation")
+    parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation")
+    parser.add_argument("-h", "--help", action="store_true", help="Show help")
 
     args = parser.parse_args()
 
     if args.help or args.data == "help":
         print(LOGO)
         parser.print_help()
-        print(f"\n{DIM}Exemplos:{RESET}")
+        print(f"\n{DIM}Examples:{RESET}")
         print(f"  qrbro")
-        print(f'  qrbro "https://meusite.com"')
-        print(f'  qrbro "texto" --color "#FF5733" --bg "#1a1a2e"')
-        print(f'  qrbro "url" --color "#FF5733" --logo logo.png -o meuqr.png')
+        print(f'  qrbro "https://example.com"')
+        print(f'  qrbro "hello" --color "#FF5733" --bg "#1a1a2e"')
+        print(f'  qrbro "url" --color "#FF5733" --logo logo.png -o output.png')
         return
 
     if args.data:
