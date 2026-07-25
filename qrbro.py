@@ -28,9 +28,29 @@ try:
     import qrcode
     from PIL import Image
 except ImportError:
-    print(" ERRO: Dependencias em falta. Instala com:")
-    print("   pip install qrcode[pil] Pillow")
-    sys.exit(1)
+    print(" Dependencias em falta. A instalar automaticamente...")
+    import subprocess
+    for cmd in [
+        [sys.executable, "-m", "pip", "install", "--quiet", "qrcode[pil]", "Pillow"],
+        [sys.executable, "-m", "pip", "install", "--quiet", "--break-system-packages", "qrcode[pil]", "Pillow"],
+        [sys.executable, "-m", "pip", "install", "--quiet", "--user", "qrcode[pil]", "Pillow"],
+    ]:
+        r = subprocess.run(cmd, capture_output=True)
+        if r.returncode == 0:
+            break
+    else:
+        print(" ERRO: Nao foi possivel instalar dependencias.")
+        print(" Tenta manualmente: pip install qrcode[pil] Pillow")
+        sys.exit(1)
+
+    # Reimportar apos instalacao
+    try:
+        import qrcode
+        from PIL import Image
+    except ImportError:
+        print(" ERRO: Falha ao importar apos instalacao.")
+        print(" Tenta manualmente: pip install qrcode[pil] Pillow")
+        sys.exit(1)
 
 
 # ── Cores ANSI ──────────────────────────────────────────

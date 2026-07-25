@@ -83,7 +83,17 @@ fi
 # Instalar dependências Python
 echo -e "A instalar dependências (qrcode, Pillow)..."
 $PYTHON -m pip install --quiet --upgrade pip 2>/dev/null || true
-if ! $PYTHON -m pip install --quiet "qrcode[pil]" Pillow; then
+
+# Tentativa 1: normal
+# Tentativa 2: --break-system-packages (Arch/CachyOS PEP 668)
+# Tentativa 3: --user
+if $PYTHON -m pip install --quiet "qrcode[pil]" Pillow 2>/dev/null; then
+    : # ok
+elif $PYTHON -m pip install --quiet --break-system-packages "qrcode[pil]" Pillow 2>/dev/null; then
+    : # ok
+elif $PYTHON -m pip install --quiet --user "qrcode[pil]" Pillow 2>/dev/null; then
+    : # ok
+else
     echo -e "${RED}ERRO: Falha ao instalar dependências Python.${NC}"
     echo "Tenta manualmente: pip install qrcode[pil] Pillow"
     exit 1
