@@ -205,10 +205,8 @@ def arrow_confirm(label: str, default: bool = True) -> bool:
 
 
 # ── ASCII QR Preview ─────────────────────────────────────
-def ascii_preview(data: str, color: str, bg: str, ec: str = "H",
-                  logo_path: str | None = None, logo_size: int = 25,
-                  max_size: int = 21) -> list[str]:
-    """Generate a small ASCII QR preview using the module matrix directly."""
+def ascii_preview(data: str, ec: str = "H", **kwargs) -> list[str]:
+    """ASCII QR preview using the module matrix. Simple ## for dark, spaces for light."""
     ec_map = {
         "L": qrcode.constants.ERROR_CORRECT_L,
         "M": qrcode.constants.ERROR_CORRECT_M,
@@ -222,34 +220,15 @@ def ascii_preview(data: str, color: str, bg: str, ec: str = "H",
     )
     qr.add_data(data)
     qr.make(fit=True)
-
-    fr, fg, fb = hex_to_rgb(color)
-    br, bg_c, bb = hex_to_rgb(bg)
-
-    fc = f"\033[38;2;{fr};{fg};{fb}m"
-    bc_s = f"\033[48;2;{br};{bg_c};{bb}m"
-    reset_c = "\033[0m"
-
-    modules = qr.modules  # True = dark module
-    lines = []
-    for row in modules:
-        line = ""
-        for cell in row:
-            if cell:
-                line += f"{bc_s}{fc}██{reset_c}"
-            else:
-                line += f"{bc_s}  {reset_c}"
-        lines.append(line)
-
-    return lines
+    modules = qr.modules
+    return ["".join("##" if c else "  " for c in row) for row in modules]
 
 
-def show_preview(data: str, color: str, bg: str, ec: str = "H",
-                 logo_path: str | None = None, logo_size: int = 25):
-    """Render ASCII QR preview to terminal."""
+def show_preview(data: str, **kwargs):
+    """Draw a simple ASCII QR preview (## for dark, spaces for light)."""
     try:
-        lines = ascii_preview(data, color, bg, ec, logo_path, logo_size)
-        print(f"  {DIM}Preview ({len(data)} chars, ec={ec}):{RESET}")
+        lines = ascii_preview(data, **kwargs)
+        print(f"  {DIM}Preview ({len(data)} chars):{RESET}")
         for line in lines:
             print(f"  {line}")
     except Exception:
@@ -355,7 +334,7 @@ def interactive_mode():
         if data:
             break
 
-    show_preview(data, color, bg, error)
+    show_preview(data, ec=error)
 
     # 2. Color scheme picker (arrow keys)
     presets_list = [(v[0], k) for k, v in COLOR_PRESETS.items()]
@@ -368,7 +347,7 @@ def interactive_mode():
         preset = COLOR_PRESETS[color_choice]
         color, bg = preset[1], preset[2]
 
-    show_preview(data, color, bg, error)
+    show_preview(data, ec=error)
 
     # 3. Logo
     logo = prompt_str("Logo path (leave empty to skip)")
@@ -381,7 +360,7 @@ def interactive_mode():
 
     # 4. Error correction picker
     error = arrow_picker("Error correction level", EC_OPTIONS, default=4)
-    show_preview(data, color, bg, error, logo if logo else None, logo_size)
+    show_preview(data, ec=error)
 
     # 5. Output
     default_out = os.path.expanduser("~/Downloads/qrcode.png")
