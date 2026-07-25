@@ -72,6 +72,7 @@ LOGO = f"""{CYAN}
           \\|__|                                                      {RESET}
    {DIM}qrbro — QR Code Builder{RESET}"""
 
+PREVIEW_DATA = "https://qr.bro"
 BACK_SENTINEL = "<BACK>"
 COLOR_PRESETS = {
     "1": ("Classic black", "#000000", "#FFFFFF"),
@@ -235,8 +236,10 @@ def arrow_confirm(label: str, default: bool = True) -> bool:
 
 
 # ── ASCII QR Preview ─────────────────────────────────────
-def ascii_preview(data: str, ec: str = "H", stride: int = 2, max_rows: int = 15, **kwargs) -> list[str]:
+def ascii_preview(data: str, ec: str = "H", stride: int = 2, max_rows: int = 15,
+                  color: str = None, **kwargs) -> list[str]:
     """ASCII QR preview. ## for dark, spaces for light.
+    If color is given, dark modules render in that color (ANSI fg).
     stride > 1 shrinks the preview (every Nth row/col)."""
     ec_map = {
         "L": qrcode.constants.ERROR_CORRECT_L,
@@ -252,12 +255,22 @@ def ascii_preview(data: str, ec: str = "H", stride: int = 2, max_rows: int = 15,
     qr.add_data(data)
     qr.make(fit=True)
 
+    fc = ""
+    rc = ""
+    if color:
+        r, g, b = hex_to_rgb(color)
+        fc = f"\033[38;2;{r};{g};{b}m"
+        rc = "\033[0m"
+
     modules = qr.modules
     out = []
     for ri in range(0, len(modules), stride):
         row = ""
         for ci in range(0, len(modules[ri]), stride):
-            row += "##" if modules[ri][ci] else "  "
+            if modules[ri][ci]:
+                row += f"{fc}##{rc}" if fc else "##"
+            else:
+                row += "  "
         out.append(row)
         if len(out) >= max_rows:
             break
@@ -384,7 +397,7 @@ def interactive_mode():
                 if val == "8":
                     return []
                 pr = COLOR_PRESETS[val]
-                return ascii_preview(data, ec=error, color=pr[1], bg=pr[2])
+                return ascii_preview(PREVIEW_DATA, ec=error, color=pr[1])
 
             presets_list = [(v[0], k) for k, v in COLOR_PRESETS.items()]
             result = arrow_picker("Color scheme", presets_list, default=4,
@@ -414,7 +427,7 @@ def interactive_mode():
         elif step == 3:
             # ── Error correction (with live preview) ──
             def ec_preview(val):
-                return ascii_preview(data, ec=val)
+                return ascii_preview(PREVIEW_DATA, ec=val)
 
             ec_opts = [("Low (L)", "L"), ("Medium (M)", "M"),
                        ("Quartile (Q)", "Q"), ("High (H)", "H")]
