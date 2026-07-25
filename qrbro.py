@@ -72,6 +72,7 @@ LOGO = f"""{CYAN}
           \\|__|                                                      {RESET}
    {DIM}qrbro — QR Code Builder{RESET}"""
 
+BACK_SENTINEL = "<BACK>"
 COLOR_PRESETS = {
     "1": ("Classic black", "#000000", "#FFFFFF"),
     "2": ("Night mode", "#00FF88", "#0D1117"),
@@ -116,97 +117,127 @@ def clear_lines(n: int):
     sys.stdout.flush()
 
 
-# ── Arrow-key picker ─────────────────────────────────────
-def arrow_picker(title: str, options: list[tuple[str, str]], default: int = 0) -> str:
-    """Arrow-key navigable picker. ↑↓ to move, Enter to select."""
+# ── Arrow-key picker with live preview ───────────────────
+def arrow_picker(title: str, options: list[tuple[str, str]], default: int = 0,
+                 preview_fn=None) -> str:
+    """Arrow-key navigable picker. ↑↓ move, Enter select, Esc back.
+    If preview_fn(selected_val) returns a list of lines, renders them live."""
     idx = default - 1 if 0 <= default - 1 < len(options) else 0
-    total = len(options) + 4  # title + header + options + blank line
 
-    print(f"\n {BOLD}?{RESET} {title}")
-    print(f"  {DIM}↑↓ navigate  Enter select{RESET}")
-    for i, (label, _) in enumerate(options):
-        indicator = f" {GREEN}▸{RESET}" if i == idx else "  "
-        print(f"{indicator} {label}")
-    print()
+    def render(draw_preview=True):
+        out = [f"\n {BOLD}?{RESET} {title}"]
+        out.append(f"  {DIM}↑↓  Enter select  Esc back{RESET}")
+        for i, (label, _) in enumerate(options):
+            indicator = f" {GREEN}▸{RESET}" if i == idx else "  "
+            out.append(f"{indicator} {label}")
+        out.append("")
+        if draw_preview and preview_fn:
+            try:
+                plines = preview_fn(options[idx][1])
+                out.append(f"  {DIM}Preview:{RESET}")
+                for l in plines[:15]:
+                    out.append(f"    {l}")
+            except Exception:
+                pass
+        return out
+
+    lines = render(draw_preview=False)
+    for l in lines:
+        print(l)
+    total = len(lines) + (min(len(preview_fn(options[0][1])[:15]) if preview_fn else 0, 15) + 1 if preview_fn else 0)
 
     while True:
+        # Draw preview
+        preview_extra = 0
+        if preview_fn:
+            idx_bk = idx
+            try:
+                plines = preview_fn(options[idx][1])
+                preview_extra = min(len(plines), 15) + 1
+                print(f"  {DIM}Preview:{RESET}")
+                for l in plines[:15]:
+                    print(f"    {l}")
+            except Exception:
+                pass
+
         key = getch()
+
         if key == "\x1b[A":  # Up
             if idx > 0:
                 idx -= 1
-                # redraw indicators
-                lines_to_redraw = total - 1
-                clear_lines(lines_to_redraw)
-                print(f" {BOLD}?{RESET} {title}")
-                print(f"  {DIM}↑↓ navigate  Enter select{RESET}")
-                for i, (label, _) in enumerate(options):
-                    indicator = f" {GREEN}▸{RESET}" if i == idx else "  "
-                    print(f"{indicator} {label}")
-                print()
+                clear_lines(len(lines) + preview_extra)
+                lines = render(draw_preview=False)
+                for l in lines:
+                    print(l)
+            else:
+                clear_lines(preview_extra) if preview_extra else None
+
         elif key == "\x1b[B":  # Down
             if idx < len(options) - 1:
                 idx += 1
-                lines_to_redraw = total - 1
-                clear_lines(lines_to_redraw)
-                print(f" {BOLD}?{RESET} {title}")
-                print(f"  {DIM}↑↓ navigate  Enter select{RESET}")
-                for i, (label, _) in enumerate(options):
-                    indicator = f" {GREEN}▸{RESET}" if i == idx else "  "
-                    print(f"{indicator} {label}")
-                print()
-        elif key in ("\r", "\n"):  # Enter
-            break
+                clear_lines(len(lines) + preview_extra)
+                lines = render(draw_preview=False)
+                for l in lines:
+                    print(l)
+            else:
+                clear_lines(preview_extra) if preview_extra else None
 
-    # Clear the picker lines
-    clear_lines(total)
-    print(f" {BOLD}?{RESET} {title} {GREEN}{options[idx][0]}{RESET}")
-    return options[idx][1]
+        elif key in ("\r", "\n"):  # Enter
+            clear_lines(len(lines) + preview_extra)
+            print(f" {BOLD}?{RESET} {title} {GREEN}{options[idx][0]}{RESET}")
+            return options[idx][1]
+
+        elif key in ("\x1b", "\x7f"):  # Esc or Backspace → go back
+            clear_lines(len(lines) + preview_extra)
+            return BACK_SENTINEL
+
+        else:
+            clear_lines(preview_extra)
 
 
 def arrow_confirm(label: str, default: bool = True) -> bool:
     """Yes/No picker with arrow keys."""
     opts = [("Yes", "y"), ("No", "n")]
     idx = 0 if default else 1
-    total = 4
-
-    print(f"\n {BOLD}?{RESET} {label}")
-    print(f"  {DIM}← → navigate  Enter confirm{RESET}")
-    for i, (lbl, _) in enumerate(opts):
-        indicator = f" {GREEN}▸{RESET}" if i == idx else "  "
-        print(f"{indicator} {lbl}")
-    print()
+    lines = [
+        f"\n {BOLD}?{RESET} {label}",
+        f"  {DIM}← →  Enter confirm  Esc back{RESET}",
+        f" {GREEN}▸{RESET}" + " Yes" if idx == 0 else "  Yes",
+        f" {GREEN}▸{RESET}" + " No" if idx == 1 else "  No",
+        "",
+    ]
+    for l in lines:
+        print(l)
 
     while True:
         key = getch()
         if key == "\x1b[C":  # Right
             idx = 1
-            clear_lines(total)
-            print(f" {BOLD}?{RESET} {label}")
-            print(f"  {DIM}← → navigate  Enter confirm{RESET}")
-            for i, (lbl, _) in enumerate(opts):
-                indicator = f" {GREEN}▸{RESET}" if i == idx else "  "
-                print(f"{indicator} {lbl}")
-            print()
+            clear_lines(5)
+            lines[2] = f" {GREEN}▸{RESET} Yes" if idx == 0 else "  Yes"
+            lines[3] = f" {GREEN}▸{RESET} No" if idx == 1 else "  No"
+            for l in lines:
+                print(l)
         elif key == "\x1b[D":  # Left
             idx = 0
-            clear_lines(total)
-            print(f" {BOLD}?{RESET} {label}")
-            print(f"  {DIM}← → navigate  Enter confirm{RESET}")
-            for i, (lbl, _) in enumerate(opts):
-                indicator = f" {GREEN}▸{RESET}" if i == idx else "  "
-                print(f"{indicator} {lbl}")
-            print()
+            clear_lines(5)
+            lines[2] = f" {GREEN}▸{RESET} Yes" if idx == 0 else "  Yes"
+            lines[3] = f" {GREEN}▸{RESET} No" if idx == 1 else "  No"
+            for l in lines:
+                print(l)
         elif key in ("\r", "\n"):
-            break
-
-    clear_lines(total)
-    print(f" {BOLD}?{RESET} {label} {GREEN}{opts[idx][0]}{RESET}")
-    return idx == 0
+            clear_lines(5)
+            print(f" {BOLD}?{RESET} {label} {GREEN}{opts[idx][0]}{RESET}")
+            return idx == 0
+        elif key in ("\x1b", "\x7f"):
+            clear_lines(5)
+            return BACK_SENTINEL
 
 
 # ── ASCII QR Preview ─────────────────────────────────────
-def ascii_preview(data: str, ec: str = "H", **kwargs) -> list[str]:
-    """ASCII QR preview using the module matrix. Simple ## for dark, spaces for light."""
+def ascii_preview(data: str, ec: str = "H", stride: int = 2, max_rows: int = 15, **kwargs) -> list[str]:
+    """ASCII QR preview. ## for dark, spaces for light.
+    stride > 1 shrinks the preview (every Nth row/col)."""
     ec_map = {
         "L": qrcode.constants.ERROR_CORRECT_L,
         "M": qrcode.constants.ERROR_CORRECT_M,
@@ -220,12 +251,21 @@ def ascii_preview(data: str, ec: str = "H", **kwargs) -> list[str]:
     )
     qr.add_data(data)
     qr.make(fit=True)
+
     modules = qr.modules
-    return ["".join("##" if c else "  " for c in row) for row in modules]
+    out = []
+    for ri in range(0, len(modules), stride):
+        row = ""
+        for ci in range(0, len(modules[ri]), stride):
+            row += "##" if modules[ri][ci] else "  "
+        out.append(row)
+        if len(out) >= max_rows:
+            break
+    return out
 
 
 def show_preview(data: str, **kwargs):
-    """Draw a simple ASCII QR preview (## for dark, spaces for light)."""
+    """Draw ASCII QR preview."""
     try:
         lines = ascii_preview(data, **kwargs)
         print(f"  {DIM}Preview ({len(data)} chars):{RESET}")
@@ -317,7 +357,7 @@ def generate_qr(
     return os.path.abspath(output)
 
 
-# ── Interactive Mode ─────────────────────────────────────
+# ── Interactive Mode (state machine with back support) ──
 def interactive_mode():
     print(LOGO)
     data = ""
@@ -326,86 +366,126 @@ def interactive_mode():
     logo = ""
     logo_size = 25
     error = "H"
+    step = 0  # current step index
 
-    # 1. Data
-    print()
     while True:
-        data = prompt_str("URL or text to encode", required=True)
-        if data:
+        if step == 0:
+            # ── Data ──
+            while True:
+                data = prompt_str("URL or text to encode", required=True)
+                if data:
+                    break
+            show_preview(data, ec=error)
+            step = 1
+
+        elif step == 1:
+            # ── Color scheme (with live preview) ──
+            def color_preview(val):
+                if val == "8":
+                    return []
+                pr = COLOR_PRESETS[val]
+                return ascii_preview(data, ec=error, color=pr[1], bg=pr[2])
+
+            presets_list = [(v[0], k) for k, v in COLOR_PRESETS.items()]
+            result = arrow_picker("Color scheme", presets_list, default=4,
+                                  preview_fn=color_preview)
+            if result == BACK_SENTINEL:
+                step = 0
+                continue
+            if result == "8":
+                color = prompt_hex("QR color", "#000000")
+                bg = prompt_hex("Background color", "#FFFFFF")
+            else:
+                preset = COLOR_PRESETS[result]
+                color, bg = preset[1], preset[2]
+            step = 2
+
+        elif step == 2:
+            # ── Logo ──
+            logo = prompt_str("Logo path (leave empty to skip)")
+            if logo:
+                sz = prompt_str("Logo size as % of QR", "25")
+                try:
+                    logo_size = int(sz)
+                except ValueError:
+                    print(f"  {YELLOW}warning{RESET} Invalid size, using 25%.")
+            step = 3
+
+        elif step == 3:
+            # ── Error correction (with live preview) ──
+            def ec_preview(val):
+                return ascii_preview(data, ec=val)
+
+            ec_opts = [("Low (L)", "L"), ("Medium (M)", "M"),
+                       ("Quartile (Q)", "Q"), ("High (H)", "H")]
+            result = arrow_picker("Error correction level", ec_opts, default=4,
+                                  preview_fn=ec_preview)
+            if result == BACK_SENTINEL:
+                step = 2
+                continue
+            error = result
+            step = 4
+
+        elif step == 4:
+            # ── Output ──
+            default_out = os.path.expanduser("~/Downloads/qrcode.png")
+            out = prompt_str("Output filename", default_out)
+            if not out.endswith(".png"):
+                out += ".png"
+            step = 5
+
+        elif step == 5:
+            # ── Show image? ──
+            result = arrow_confirm("Open image after generation?", default=False)
+            if result == BACK_SENTINEL:
+                step = 4
+                continue
+            show = result
+            step = 6
+
+        elif step == 6:
+            # ── Summary & Confirm ──
+            ec_label = {"L": "Low", "M": "Medium", "Q": "Quartile", "H": "High"}
+            print(f"\n {DIM}{'─'*44}{RESET}")
+            print(f" {BOLD}Summary:{RESET}")
+            print(f"   Data:     {data}")
+            print(f"   QR color: {color}")
+            print(f"   BG color: {bg}")
+            print(f"   Logo:     {logo or '(none)'}")
+            print(f"   Error:    {ec_label.get(error, error)}")
+            print(f"   Output:   {out}")
+            print(f"   Open:     {'yes' if show else 'no'}")
+            show_preview(data, ec=error)
+            print(f" {DIM}{'─'*44}{RESET}")
+
+            result = arrow_confirm("Generate QR code?", default=True)
+            if result == BACK_SENTINEL:
+                step = 5
+                continue
+
+            if result is False:
+                print(f"\n {YELLOW}Cancelled.{RESET}")
+                sys.exit(0)
+
+            # ── Generate ──
+            print(f"\n {DIM}Generating QR code...{RESET}")
+            try:
+                path = generate_qr(
+                    data=data,
+                    color=color,
+                    bg_color=bg,
+                    logo_path=logo or None,
+                    logo_size_pct=logo_size,
+                    output=out,
+                    error_correction=error,
+                    show=show,
+                )
+                print(f"\n {GREEN}{BOLD}✓ QR code generated!{RESET}")
+                print(f"   {path}\n")
+            except Exception as e:
+                print(f"\n {RED}error{RESET} {e}")
+                sys.exit(1)
             break
-
-    show_preview(data, ec=error)
-
-    # 2. Color scheme picker (arrow keys)
-    presets_list = [(v[0], k) for k, v in COLOR_PRESETS.items()]
-    color_choice = arrow_picker("Color scheme", presets_list, default=4)
-
-    if color_choice == "8":
-        color = prompt_hex("QR color", "#000000")
-        bg = prompt_hex("Background color", "#FFFFFF")
-    else:
-        preset = COLOR_PRESETS[color_choice]
-        color, bg = preset[1], preset[2]
-
-    show_preview(data, ec=error)
-
-    # 3. Logo
-    logo = prompt_str("Logo path (leave empty to skip)")
-    if logo:
-        sz = prompt_str("Logo size as % of QR", "25")
-        try:
-            logo_size = int(sz)
-        except ValueError:
-            print(f"  {YELLOW}warning{RESET} Invalid size, using 25%.")
-
-    # 4. Error correction picker
-    error = arrow_picker("Error correction level", EC_OPTIONS, default=4)
-    show_preview(data, ec=error)
-
-    # 5. Output
-    default_out = os.path.expanduser("~/Downloads/qrcode.png")
-    out = prompt_str("Output filename", default_out)
-    if not out.endswith(".png"):
-        out += ".png"
-
-    # 6. Show image?
-    show = arrow_confirm("Open image after generation?", default=False)
-
-    # ── Summary ────────────────────────────────────────
-    ec_label = {"L": "Low", "M": "Medium", "Q": "Quartile", "H": "High"}
-    print(f"\n {DIM}{'─'*44}{RESET}")
-    print(f" {BOLD}Summary:{RESET}")
-    print(f"   Data:     {data}")
-    print(f"   QR color: {color}")
-    print(f"   BG color: {bg}")
-    print(f"   Logo:     {logo or '(none)'}")
-    print(f"   Error:    {ec_label.get(error, error)}")
-    print(f"   Output:   {out}")
-    print(f"   Open:     {'yes' if show else 'no'}")
-    show_preview(data, color, bg, error, logo if logo else None, logo_size)
-    print(f" {DIM}{'─'*44}{RESET}")
-
-    if not arrow_confirm("Generate QR code?", default=True):
-        print(f"\n {YELLOW}Cancelled.{RESET}")
-        sys.exit(0)
-
-    print(f"\n {DIM}Generating QR code...{RESET}")
-    try:
-        path = generate_qr(
-            data=data,
-            color=color,
-            bg_color=bg,
-            logo_path=logo or None,
-            logo_size_pct=logo_size,
-            output=out,
-            error_correction=error,
-            show=show,
-        )
-        print(f"\n {GREEN}{BOLD}✓ QR code generated!{RESET}")
-        print(f"   {path}\n")
-    except Exception as e:
-        print(f"\n {RED}error{RESET} {e}")
-        sys.exit(1)
 
 
 # ── Direct Mode ──────────────────────────────────────────
