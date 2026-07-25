@@ -208,7 +208,7 @@ def arrow_confirm(label: str, default: bool = True) -> bool:
 def ascii_preview(data: str, color: str, bg: str, ec: str = "H",
                   logo_path: str | None = None, logo_size: int = 25,
                   max_size: int = 21) -> list[str]:
-    """Generate a small ASCII QR preview. Returns list of lines."""
+    """Generate a small ASCII QR preview using the module matrix directly."""
     ec_map = {
         "L": qrcode.constants.ERROR_CORRECT_L,
         "M": qrcode.constants.ERROR_CORRECT_M,
@@ -217,48 +217,29 @@ def ascii_preview(data: str, color: str, bg: str, ec: str = "H",
     }
     qr = qrcode.QRCode(
         error_correction=ec_map.get(ec, qrcode.constants.ERROR_CORRECT_H),
-        box_size=2,
+        box_size=1,
         border=1,
     )
     qr.add_data(data)
     qr.make(fit=True)
-    img = qr.make_image(fill_color=color, back_color=bg).convert("RGBA")
 
-    # Apply actual colors
-    pixels = img.load()
-    w, h = img.size
     fr, fg, fb = hex_to_rgb(color)
     br, bg_c, bb = hex_to_rgb(bg)
 
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = pixels[x, y]
-            if r < 128 and g < 128 and b < 128:
-                pixels[x, y] = (fr, fg, fb, a)
-            elif r > 200 and g > 200 and b > 200:
-                pixels[x, y] = (br, bg_c, bb, a)
-
-    # Downscale for preview
-    preview = img.resize((max_size, max_size), Image.NEAREST)
-    p = preview.load()
-    pw, ph = preview.size
-
-    # ANSI color codes for fill and bg
     fc = f"\033[38;2;{fr};{fg};{fb}m"
     bc_s = f"\033[48;2;{br};{bg_c};{bb}m"
     reset_c = "\033[0m"
 
+    modules = qr.modules  # True = dark module
     lines = []
-    for y in range(ph):
-        row = ""
-        for x in range(pw):
-            r, g, b, a = p[x, y]
-            # Check if this pixel is "dark" (QR module)
-            if r < 128:
-                row += f"{bc_s}{fc}  {reset_c}"
+    for row in modules:
+        line = ""
+        for cell in row:
+            if cell:
+                line += f"{bc_s}{fc}██{reset_c}"
             else:
-                row += f"{bc_s}  {reset_c}"
-        lines.append(row)
+                line += f"{bc_s}  {reset_c}"
+        lines.append(line)
 
     return lines
 
@@ -332,20 +313,6 @@ def generate_qr(
     qr.make(fit=True)
 
     img = qr.make_image(fill_color=color, back_color=bg_color).convert("RGBA")
-
-    # Force exact colors on all pixels
-    pixels = img.load()
-    w, h = img.size
-    fill_rgb = hex_to_rgb(color)
-    back_rgb = hex_to_rgb(bg_color)
-
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = pixels[x, y]
-            if r < 128 and g < 128 and b < 128:
-                pixels[x, y] = (*fill_rgb, a)
-            elif r > 200 and g > 200 and b > 200:
-                pixels[x, y] = (*back_rgb, a)
 
     # Center logo
     if logo_path and os.path.isfile(logo_path):
