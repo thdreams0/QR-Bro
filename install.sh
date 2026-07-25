@@ -4,7 +4,7 @@ set -euo pipefail
 REPO="thdreams0/QR-Bro"
 BRANCH="main"
 INSTALL_DIR="${HOME}/.local/bin"
-SCRIPT_NAME="qrgen"
+SCRIPT_NAME="qrbro"
 RAW_BASE="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 
 # Cores para output
@@ -14,7 +14,7 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${BOLD}QRGen Installer${NC}"
+echo -e "${BOLD}QR-Bro Installer${NC}"
 echo "--------------------"
 
 # Detetar python3
@@ -64,14 +64,14 @@ else
     exit 1
 fi
 
-# Fazer download do módulo qrgen.py
+# Fazer download do módulo qrbro.py
 MODULE_FILE=$(mktemp)
 trap 'rm -f "$MODULE_FILE" "$TMP_FILE"' EXIT
 
 if command -v curl &>/dev/null; then
-    curl -fsSL "${RAW_BASE}/qrgen.py" -o "$MODULE_FILE"
+    curl -fsSL "${RAW_BASE}/qrbro.py" -o "$MODULE_FILE"
 else
-    wget -q "${RAW_BASE}/qrgen.py" -O "$MODULE_FILE"
+    wget -q "${RAW_BASE}/qrbro.py" -O "$MODULE_FILE"
 fi
 
 # Validar que são scripts Python válidos
@@ -94,12 +94,12 @@ install -m 755 "$TMP_FILE" "${INSTALL_DIR}/${SCRIPT_NAME}"
 install -m 644 "$MODULE_FILE" "${INSTALL_DIR}/${SCRIPT_NAME}.py"
 
 echo ""
-echo -e "${GREEN}✓ QRGen instalado com sucesso!${NC}"
+echo -e "${GREEN}✓ QR-Bro instalado com sucesso!${NC}"
 echo ""
-echo -e "Usa: ${BOLD}qrgen \"texto ou URL\"${NC}"
+echo -e "Usa: ${BOLD}qrbro${NC}"
 echo ""
 echo "Exemplos:"
-echo "  qrgen https://meusite.com"
-echo '  qrgen "Olá mundo" --color "#FF5733"'
-echo "  qrgen https://meusite.com --color #FF5733 --logo logo.png -o meuqr.png"
-echo "  qrgen --help"
+echo "  qrbro"
+echo '  qrbro "Olá mundo" --color "#FF5733"'
+echo "  qrbro https://meusite.com --color #FF5733 --logo logo.png -o meuqr.png"
+echo "  qrbro --help"
