@@ -9,23 +9,23 @@
     \ \_______\ \__\\\\ _\               \ \_______\ \__\\\\ _\\ \_______\
      \|_______|\|__|\|__|                \|_______|\|__|\|__|\|_______|
   </pre>
-  <p><strong>QR-Bro</strong> — gerador de QR codes no terminal.<br>
-  Interativo com setas, preview ASCII ao vivo, cores, logo central.</p>
+  <p><strong>QR-Bro</strong> — QR code generator for the terminal.<br>
+  Interactive arrow-key pickers, live ASCII preview, colors, center logo.</p>
 </p>
 
 ---
 
-## Instalação
+## Installation
 
-### Com curl (recomendado)
+### With curl (recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/thdreams0/QR-Bro/main/install.sh | bash
 ```
 
-Isto descarrega o `qrbro` para `~/.local/bin/` e instala as dependências (`qrcode[pil]`, `Pillow`).
+Downloads `qrbro` to `~/.local/bin/` and installs dependencies (`qrcode[pil]`, `Pillow`).
 
-Se `~/.local/bin/` não estiver no teu `PATH`, adiciona ao teu shell config:
+If `~/.local/bin/` is not in your `PATH`, add it:
 
 ```bash
 # ~/.bashrc / ~/.zshrc
@@ -45,53 +45,53 @@ chmod +x qrbro
 ./qrbro
 ```
 
-Ou copia os ficheiros para `~/.local/bin/`.
+Or copy the files to `~/.local/bin/`.
 
 ---
 
-## Uso
+## Usage
 
-### Modo interativo (recomendado)
+### Interactive mode (recommended)
 
 ```bash
 qrbro
 ```
 
-Navega com setas ↑↓, Enter para confirmar, Esc para voltar. O preview ASCII do QR aparece ao vivo enquanto escolhes cores e nível de erro.
+Navigate with ↑↓ arrows, Enter to confirm, Esc to go back. The live ASCII preview updates as you pick colors and error correction levels.
 
-### Modo direto
+### Direct mode
 
 ```bash
 qrbro "https://example.com"
-qrbro "texto ou URL" --color "#FF5733" --bg "#1a1a2e"
+qrbro "text or URL" --color "#FF5733" --bg "#1a1a2e"
 qrbro "https://example.com" --logo logo.png -o output.png
 qrbro --help
 ```
 
 ---
 
-## Opções
+## Options
 
-| Opção | Descrição | Default |
-|-------|-----------|---------|
-| `--color HEX` | Cor do QR (hex) | `#000000` |
-| `--bg HEX` | Cor de fundo (hex) | `#FFFFFF` |
-| `--logo PATH` | Caminho para logo central | — |
-| `--logo-size PCT` | Tamanho do logo em % do QR | `25` |
-| `--output PATH` / `-o` | Ficheiro de saída | `~/Downloads/qrcode.png` |
-| `--version VER` | Versão QR 1–40 | auto |
-| `--box-size N` | Tamanho de cada módulo (px) | `10` |
-| `--border N` | Espessura da borda | `4` |
-| `--error L/M/Q/H` | Nível de correção de erros | `H` |
-| `--show` | Abrir imagem após gerar | — |
-| `-y` | Saltar confirmação | — |
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--color HEX` | QR color (hex) | `#000000` |
+| `--bg HEX` | Background color (hex) | `#FFFFFF` |
+| `--logo PATH` | Center logo image path | — |
+| `--logo-size PCT` | Logo size as % of QR | `25` |
+| `--output PATH` / `-o` | Output file | `~/Downloads/qrcode.png` |
+| `--version VER` | QR version 1–40 | auto |
+| `--box-size N` | Module size in px | `10` |
+| `--border N` | Border thickness | `4` |
+| `--error L/M/Q/H` | Error correction level | `H` |
+| `--show` | Open image after generation | — |
+| `-y` | Skip confirmation | — |
 
 ---
 
-## Presets de cor (modo interativo)
+## Color presets (interactive mode)
 
-| # | Nome | QR | Fundo |
-|---|------|----|-------|
+| # | Name | QR | Background |
+|---|------|----|------------|
 | 1 | Classic black | `#000000` | `#FFFFFF` |
 | 2 | Night mode | `#00FF88` | `#0D1117` |
 | 3 | Royal | `#FFD700` | `#1a1a2e` |
@@ -99,32 +99,32 @@ qrbro --help
 | 5 | Ocean | `#00BFFF` | `#001830` |
 | 6 | Neon pink | `#FF1493` | `#000000` |
 | 7 | Minimal | `#333333` | `#FFFFFF` |
-| 8 | Custom | escolhes | escolhes |
+| 8 | Custom | you choose | you choose |
 
 ---
 
-## Exemplos
+## Examples
 
 ```bash
-# Interativo (setas, preview ao vivo)
+# Interactive (arrows, live preview)
 qrbro
 
-# QR simples
+# Simple QR
 qrbro "https://github.com/thdreams0"
 
-# Com cores
-qrbro "Olá mundo" --color "#FF5733" --bg "#1a1a2e"
+# With colors
+qrbro "Hello world" --color "#FF5733" --bg "#1a1a2e"
 
-# Com logo central
+# With center logo
 qrbro "https://example.com" --logo logo.png --logo-size 30
 
-# Output personalizado
-qrbro "https://example.com" -o ~/Desktop/meuqr.png
+# Custom output
+qrbro "https://example.com" -o ~/Desktop/myqr.png
 
-# Abrir automaticamente
+# Open automatically
 qrbro "https://example.com" --show
 
-# Tudo junto
+# All together
 qrbro "https://example.com" \
   --color "#00FF88" --bg "#0D1117" \
   --logo icon.png --logo-size 25 \
@@ -133,13 +133,13 @@ qrbro "https://example.com" \
 
 ---
 
-## Requisitos
+## Requirements
 
 - Python 3.8+
-- `qrcode[pil]` e `Pillow` (instalados automaticamente)
+- `qrcode[pil]` and `Pillow` (installed automatically)
 
 ---
 
 <p align="center">
-  <sub>Feito por <a href="https://github.com/thdreams0">thdreams0</a></sub>
+  <sub>Made by <a href="https://github.com/thdreams0">thdreams0</a></sub>
 </p>
