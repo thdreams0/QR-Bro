@@ -88,8 +88,9 @@ def hex_to_rgb(hex_color: str) -> tuple:
 
 def getch() -> str:
     """Read a single keypress. Returns escape sequences for arrow keys.
-    Raises KeyboardInterrupt on Ctrl+C."""
-    import termios, tty
+    Raises KeyboardInterrupt on Ctrl+C.
+    Uses select timeout to distinguish Esc from arrow key sequences."""
+    import termios, tty, select
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     try:
@@ -98,8 +99,11 @@ def getch() -> str:
         if ch == "\x03":
             raise KeyboardInterrupt()
         if ch == "\x1b":
-            nxt = sys.stdin.read(2)
-            return ch + nxt
+            # Check if more bytes arrive within 0.1s (arrow keys)
+            if select.select([fd], [], [], 0.1)[0]:
+                nxt = sys.stdin.read(2)
+                return ch + nxt
+            return ch  # standalone Esc
         return ch
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
@@ -447,18 +451,10 @@ def interactive_mode():
                 step = 4
 
             elif step == 4:
-                # ── Output ──
-                default_out = os.path.expanduser("~/Downloads/qrcode.png")
-                out = prompt_str("Output filename", default_out)
-                if not out.endswith(".png"):
-                    out += ".png"
-                step = 5
-
-            elif step == 5:
                 # ── Show image? ──
                 result = arrow_confirm("Open image after generation?", default=False)
                 if result == BACK_SENTINEL:
-                    step = 4
+                    step = 3
                     continue
                 if result == CTRL_C_SENTINEL:
                     if _confirm_quit():
@@ -466,10 +462,12 @@ def interactive_mode():
                         return
                     continue
                 show = result
-                step = 6
+                step = 5
 
-            elif step == 6:
-                # ── Summary & Confirm ──
+            elif step == 5:
+                # ── Summary & Generate ──
+                default_out = os.path.expanduser("~/Downloads/qrcode.png")
+                out = default_out
                 ec_label = {"L": "Low", "M": "Medium", "Q": "Quartile", "H": "High"}
                 print(f"\n {DIM}{'─'*44}{RESET}")
                 print(f" {BOLD}Summary:{RESET}")
@@ -483,21 +481,6 @@ def interactive_mode():
                 show_preview(data, ec=error)
                 print(f" {DIM}{'─'*44}{RESET}")
 
-                result = arrow_confirm("Generate QR code?", default=True)
-                if result == BACK_SENTINEL:
-                    step = 5
-                    continue
-                if result == CTRL_C_SENTINEL:
-                    if _confirm_quit():
-                        print(f" {YELLOW}Bye.{RESET}")
-                        return
-                    continue
-
-                if result is False:
-                    print(f"\n {YELLOW}Cancelled.{RESET}")
-                    sys.exit(0)
-
-                # ── Generate ──
                 print(f"\n {DIM}Generating QR code...{RESET}")
                 try:
                     path = generate_qr(

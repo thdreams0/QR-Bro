@@ -57,7 +57,7 @@ Or copy the files to `~/.local/bin/`.
 qrbro
 ```
 
-Navigate with ↑↓ arrows, Enter to confirm, Esc to go back, Ctrl+C to quit. The live ASCII preview updates as you pick error correction levels.
+Navigate with ↑↓ arrows, Enter to confirm, Esc to go back, Ctrl+C to quit. The live ASCII preview updates as you pick error correction levels. Output goes to `~/Downloads/qrcode.png` by default — no extra prompts.
 
 ### Direct mode
 
