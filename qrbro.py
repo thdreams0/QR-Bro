@@ -73,10 +73,6 @@ LOGO = f"""{CYAN}
           \\|__|                                                      {RESET}
    {DIM}qrbro — QR Code Builder{RESET}"""
 
-PREVIEW_DATA = "https://qr.bro"
-BACK_SENTINEL = "<BACK>"
-CTRL_C_SENTINEL = "<CTRL-C>"
-
 
 # ── Terminal helpers ─────────────────────────────────────
 def hex_to_rgb(hex_color: str) -> tuple:
@@ -84,161 +80,6 @@ def hex_to_rgb(hex_color: str) -> tuple:
     if len(hex_color) == 3:
         hex_color = "".join(c * 2 for c in hex_color)
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-
-
-def getch() -> str:
-    """Read a single keypress. Returns escape sequences for arrow keys.
-    Raises KeyboardInterrupt on Ctrl+C.
-    Uses select timeout to distinguish Esc from arrow key sequences."""
-    import termios, tty, select
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        ch = sys.stdin.read(1)
-        if ch == "\x03":
-            raise KeyboardInterrupt()
-        if ch == "\x1b":
-            # Check if more bytes arrive within 0.1s (arrow keys)
-            if select.select([fd], [], [], 0.1)[0]:
-                nxt = sys.stdin.read(2)
-                return ch + nxt
-            return ch  # standalone Esc
-        return ch
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-
-
-def clear_lines(n: int):
-    """Move cursor up n lines and clear them."""
-    for _ in range(n):
-        sys.stdout.write("\033[F\033[K")
-    sys.stdout.flush()
-
-
-# ── Arrow-key picker with live preview ───────────────────
-def arrow_picker(title: str, options: list[tuple[str, str]], default: int = 0,
-                 preview_fn=None) -> str:
-    """Arrow-key navigable picker. ↑↓ move, Enter select, Esc back.
-    If preview_fn(selected_val) returns a list of lines, renders them live."""
-    idx = default - 1 if 0 <= default - 1 < len(options) else 0
-
-    def render(draw_preview=True):
-        out = [f"\n {BOLD}?{RESET} {title}"]
-        out.append(f"  {DIM}↑↓  Enter select  Esc back{RESET}")
-        for i, (label, _) in enumerate(options):
-            indicator = f" {GREEN}▸{RESET}" if i == idx else "  "
-            out.append(f"{indicator} {label}")
-        out.append("")
-        if draw_preview and preview_fn:
-            try:
-                plines = preview_fn(options[idx][1])
-                out.append(f"  {DIM}Preview:{RESET}")
-                for l in plines[:15]:
-                    out.append(f"    {l}")
-            except Exception:
-                pass
-        return out
-
-    lines = render(draw_preview=False)
-    for l in lines:
-        print(l)
-    total = len(lines) + (min(len(preview_fn(options[0][1])[:15]) if preview_fn else 0, 15) + 1 if preview_fn else 0)
-
-    while True:
-        # Draw preview
-        preview_extra = 0
-        if preview_fn:
-            idx_bk = idx
-            try:
-                plines = preview_fn(options[idx][1])
-                preview_extra = min(len(plines), 15) + 1
-                print(f"  {DIM}Preview:{RESET}")
-                for l in plines[:15]:
-                    print(f"    {l}")
-            except Exception:
-                pass
-
-        try:
-            key = getch()
-        except KeyboardInterrupt:
-            clear_lines(len(lines) + preview_extra)
-            return CTRL_C_SENTINEL
-
-        if key == "\x1b[A":  # Up
-            if idx > 0:
-                idx -= 1
-                clear_lines(len(lines) + preview_extra)
-                lines = render(draw_preview=False)
-                for l in lines:
-                    print(l)
-            else:
-                clear_lines(preview_extra) if preview_extra else None
-
-        elif key == "\x1b[B":  # Down
-            if idx < len(options) - 1:
-                idx += 1
-                clear_lines(len(lines) + preview_extra)
-                lines = render(draw_preview=False)
-                for l in lines:
-                    print(l)
-            else:
-                clear_lines(preview_extra) if preview_extra else None
-
-        elif key in ("\r", "\n"):  # Enter
-            clear_lines(len(lines) + preview_extra)
-            print(f" {BOLD}?{RESET} {title} {GREEN}{options[idx][0]}{RESET}")
-            return options[idx][1]
-
-        elif key in ("\x1b", "\x7f"):  # Esc or Backspace → go back
-            clear_lines(len(lines) + preview_extra)
-            return BACK_SENTINEL
-
-        else:
-            clear_lines(preview_extra)
-
-
-def arrow_confirm(label: str, default: bool = True) -> bool:
-    """Yes/No picker with arrow keys."""
-    opts = [("Yes", "y"), ("No", "n")]
-    idx = 0 if default else 1
-    lines = [
-        f"\n {BOLD}?{RESET} {label}",
-        f"  {DIM}← →  Enter confirm  Esc back{RESET}",
-        f" {GREEN}▸{RESET}" + " Yes" if idx == 0 else "  Yes",
-        f" {GREEN}▸{RESET}" + " No" if idx == 1 else "  No",
-        "",
-    ]
-    for l in lines:
-        print(l)
-
-    while True:
-        try:
-            key = getch()
-        except KeyboardInterrupt:
-            clear_lines(5)
-            return CTRL_C_SENTINEL
-        if key == "\x1b[C":  # Right
-            idx = 1
-            clear_lines(5)
-            lines[2] = f" {GREEN}▸{RESET} Yes" if idx == 0 else "  Yes"
-            lines[3] = f" {GREEN}▸{RESET} No" if idx == 1 else "  No"
-            for l in lines:
-                print(l)
-        elif key == "\x1b[D":  # Left
-            idx = 0
-            clear_lines(5)
-            lines[2] = f" {GREEN}▸{RESET} Yes" if idx == 0 else "  Yes"
-            lines[3] = f" {GREEN}▸{RESET} No" if idx == 1 else "  No"
-            for l in lines:
-                print(l)
-        elif key in ("\r", "\n"):
-            clear_lines(5)
-            print(f" {BOLD}?{RESET} {label} {GREEN}{opts[idx][0]}{RESET}")
-            return idx == 0
-        elif key in ("\x1b", "\x7f"):
-            clear_lines(5)
-            return BACK_SENTINEL
 
 
 # ── ASCII QR Preview ─────────────────────────────────────
@@ -312,7 +153,34 @@ def prompt_hex(label: str, default: str) -> str:
     return f"#{val.lstrip('#')}"
 
 
+def prompt_yesno(label: str, default: bool = True) -> bool:
+    """Simple [Y/n] or [y/N] prompt."""
+    hint = "Y/n" if default else "y/N"
+    while True:
+        val = input(f"  {BOLD}?{RESET} {label} {DIM}[{hint}]:{RESET} ").strip().lower()
+        if not val:
+            return default
+        if val in ("y", "yes", "s", "sim"):
+            return True
+        if val in ("n", "no"):
+            return False
+        print(f"  {YELLOW}Please answer Y or N.{RESET}")
+
+
 # ── QR Generation ────────────────────────────────────────
+def _round_corners(img: Image.Image, radius: int = None) -> Image.Image:
+    """Apply rounded corners to an RGBA image."""
+    if radius is None:
+        radius = max(8, min(img.size) // 20)
+    from PIL import ImageDraw
+    mask = Image.new("L", img.size, 0)
+    draw = ImageDraw.Draw(mask)
+    w, h = img.size
+    draw.rounded_rectangle([(0, 0), (w - 1, h - 1)], radius=radius, fill=255)
+    img.putalpha(mask)
+    return img
+
+
 def generate_qr(
     data: str,
     color: str = "#000000",
@@ -325,6 +193,7 @@ def generate_qr(
     border: int = 4,
     error_correction: str = "H",
     show: bool = False,
+    style: str = "rounded",
 ) -> str:
 
     if not output:
@@ -350,7 +219,26 @@ def generate_qr(
     qr.add_data(data)
     qr.make(fit=True)
 
-    img = qr.make_image(fill_color=color, back_color=bg_color).convert("RGBA")
+    # Styled generation with rounded modules
+    from qrcode.image.styledpil import StyledPilImage
+    from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
+    from qrcode.image.styles.colormasks import SolidFillColorMask
+
+    fc_rgb = hex_to_rgb(color)
+    bc_rgb = hex_to_rgb(bg_color)
+    drawer = RoundedModuleDrawer()
+
+    img = qr.make_image(
+        image_factory=StyledPilImage,
+        module_drawer=drawer,
+        color_mask=SolidFillColorMask(
+            back_color=(*bc_rgb, 255),
+            front_color=(*fc_rgb, 255),
+        ),
+    ).convert("RGBA")
+
+    # Apply rounded outer corners
+    img = _round_corners(img)
 
     # Center logo
     if logo_path and os.path.isfile(logo_path):
@@ -376,16 +264,10 @@ def generate_qr(
     return os.path.abspath(output)
 
 
-# ── Interactive Mode (state machine with back support) ──
+# ── Interactive Mode ─────────────────────────────────────
 def _confirm_quit() -> bool:
     """Ask user if they want to quit. Returns True if quitting."""
-    try:
-        result = arrow_confirm("Quit QR-Bro?")
-    except KeyboardInterrupt:
-        return True  # double Ctrl+C → quit
-    if result is True or result == CTRL_C_SENTINEL:
-        return True
-    return False
+    return prompt_yesno("Quit QR-Bro?", default=False)
 
 
 def interactive_mode():
@@ -396,10 +278,9 @@ def interactive_mode():
     logo = ""
     logo_size = 25
     error = "H"
-    step = 0  # current step index
+    step = 0
 
     signal.signal(signal.SIGINT, signal.default_int_handler)
-    out = ""
     show = False
 
     try:
@@ -431,51 +312,20 @@ def interactive_mode():
                 step = 3
 
             elif step == 3:
-                # ── Error correction (with live preview) ──
-                def ec_preview(val):
-                    return ascii_preview(PREVIEW_DATA, ec=val)
-
-                ec_opts = [("Low (L)", "L"), ("Medium (M)", "M"),
-                           ("Quartile (Q)", "Q"), ("High (H)", "H")]
-                result = arrow_picker("Error correction level", ec_opts, default=4,
-                                      preview_fn=ec_preview)
-                if result == BACK_SENTINEL:
-                    step = 2
-                    continue
-                if result == CTRL_C_SENTINEL:
-                    if _confirm_quit():
-                        print(f" {YELLOW}Bye.{RESET}")
-                        return
-                    continue
-                error = result
+                # ── Show image? ──
+                show = prompt_yesno("Open image after generation?", default=False)
                 step = 4
 
             elif step == 4:
-                # ── Show image? ──
-                result = arrow_confirm("Open image after generation?", default=False)
-                if result == BACK_SENTINEL:
-                    step = 3
-                    continue
-                if result == CTRL_C_SENTINEL:
-                    if _confirm_quit():
-                        print(f" {YELLOW}Bye.{RESET}")
-                        return
-                    continue
-                show = result
-                step = 5
-
-            elif step == 5:
                 # ── Summary & Generate ──
                 default_out = os.path.expanduser("~/Downloads/qrcode.png")
                 out = default_out
-                ec_label = {"L": "Low", "M": "Medium", "Q": "Quartile", "H": "High"}
                 print(f"\n {DIM}{'─'*44}{RESET}")
                 print(f" {BOLD}Summary:{RESET}")
                 print(f"   Data:     {data}")
                 print(f"   QR color: {color}")
                 print(f"   BG color: {bg}")
                 print(f"   Logo:     {logo or '(none)'}")
-                print(f"   Error:    {ec_label.get(error, error)}")
                 print(f"   Output:   {out}")
                 print(f"   Open:     {'yes' if show else 'no'}")
                 show_preview(data, ec=error)
@@ -503,7 +353,6 @@ def interactive_mode():
         if _confirm_quit():
             print(f" {YELLOW}Bye.{RESET}")
         else:
-            # Go back to where we were — restart interactive
             interactive_mode()
 
 
