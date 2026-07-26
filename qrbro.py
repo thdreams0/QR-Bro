@@ -275,8 +275,6 @@ def interactive_mode():
     data = ""
     color = "#000000"
     bg = "#FFFFFF"
-    logo = ""
-    logo_size = 25
     error = "H"
     step = 0
 
@@ -301,22 +299,11 @@ def interactive_mode():
                 step = 2
 
             elif step == 2:
-                # ── Logo ──
-                logo = prompt_str("Logo path (leave empty to skip)")
-                if logo:
-                    sz = prompt_str("Logo size as % of QR", "25")
-                    try:
-                        logo_size = int(sz)
-                    except ValueError:
-                        print(f"  {YELLOW}warning{RESET} Invalid size, using 25%.")
+                # ── Show image? ──
+                show = prompt_yesno("Open image after generation?", default=False)
                 step = 3
 
             elif step == 3:
-                # ── Show image? ──
-                show = prompt_yesno("Open image after generation?", default=False)
-                step = 4
-
-            elif step == 4:
                 # ── Summary & Generate ──
                 default_out = os.path.expanduser("~/Downloads/qrcode.png")
                 out = default_out
@@ -325,7 +312,6 @@ def interactive_mode():
                 print(f"   Data:     {data}")
                 print(f"   QR color: {color}")
                 print(f"   BG color: {bg}")
-                print(f"   Logo:     {logo or '(none)'}")
                 print(f"   Output:   {out}")
                 print(f"   Open:     {'yes' if show else 'no'}")
                 show_preview(data, ec=error)
@@ -337,8 +323,6 @@ def interactive_mode():
                         data=data,
                         color=color,
                         bg_color=bg,
-                        logo_path=logo or None,
-                        logo_size_pct=logo_size,
                         output=out,
                         error_correction=error,
                         show=show,
