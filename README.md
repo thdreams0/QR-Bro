@@ -57,7 +57,7 @@ Or copy the files to `~/.local/bin/`.
 qrbro
 ```
 
-Navigate with ↑↓ arrows, Enter to confirm, Esc to go back. The live ASCII preview updates as you pick colors and error correction levels.
+Navigate with ↑↓ arrows, Enter to confirm, Esc to go back, Ctrl+C to quit. The live ASCII preview updates as you pick error correction levels.
 
 ### Direct mode
 
@@ -85,21 +85,6 @@ qrbro --help
 | `--error L/M/Q/H` | Error correction level | `H` |
 | `--show` | Open image after generation | — |
 | `-y` | Skip confirmation | — |
-
----
-
-## Color presets (interactive mode)
-
-| # | Name | QR | Background |
-|---|------|----|------------|
-| 1 | Classic black | `#000000` | `#FFFFFF` |
-| 2 | Night mode | `#00FF88` | `#0D1117` |
-| 3 | Royal | `#FFD700` | `#1a1a2e` |
-| 4 | Fire | `#FF5733` | `#1a0a00` |
-| 5 | Ocean | `#00BFFF` | `#001830` |
-| 6 | Neon pink | `#FF1493` | `#000000` |
-| 7 | Minimal | `#333333` | `#FFFFFF` |
-| 8 | Custom | you choose | you choose |
 
 ---
 

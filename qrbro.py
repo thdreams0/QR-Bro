@@ -22,6 +22,7 @@ OPTIONS (direct mode):
 """
 
 import argparse
+import signal
 import sys
 import os
 
@@ -74,17 +75,7 @@ LOGO = f"""{CYAN}
 
 PREVIEW_DATA = "https://qr.bro"
 BACK_SENTINEL = "<BACK>"
-COLOR_PRESETS = {
-    "1": ("Classic black", "#000000", "#FFFFFF"),
-    "2": ("Night mode", "#00FF88", "#0D1117"),
-    "3": ("Royal", "#FFD700", "#1a1a2e"),
-    "4": ("Fire", "#FF5733", "#1a0a00"),
-    "5": ("Ocean", "#00BFFF", "#001830"),
-    "6": ("Neon pink", "#FF1493", "#000000"),
-    "7": ("Minimal", "#333333", "#FFFFFF"),
-    "8": ("Custom", None, None),
-}
-EC_OPTIONS = [("Low (L)", "L"), ("Medium (M)", "M"), ("Quartile (Q)", "Q"), ("High (H)", "H")]
+CTRL_C_SENTINEL = "<CTRL-C>"
 
 
 # ── Terminal helpers ─────────────────────────────────────
@@ -96,13 +87,16 @@ def hex_to_rgb(hex_color: str) -> tuple:
 
 
 def getch() -> str:
-    """Read a single keypress. Returns escape sequences for arrow keys."""
+    """Read a single keypress. Returns escape sequences for arrow keys.
+    Raises KeyboardInterrupt on Ctrl+C."""
     import termios, tty
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
         ch = sys.stdin.read(1)
+        if ch == "\x03":
+            raise KeyboardInterrupt()
         if ch == "\x1b":
             nxt = sys.stdin.read(2)
             return ch + nxt
@@ -161,7 +155,11 @@ def arrow_picker(title: str, options: list[tuple[str, str]], default: int = 0,
             except Exception:
                 pass
 
-        key = getch()
+        try:
+            key = getch()
+        except KeyboardInterrupt:
+            clear_lines(len(lines) + preview_extra)
+            return CTRL_C_SENTINEL
 
         if key == "\x1b[A":  # Up
             if idx > 0:
@@ -211,7 +209,11 @@ def arrow_confirm(label: str, default: bool = True) -> bool:
         print(l)
 
     while True:
-        key = getch()
+        try:
+            key = getch()
+        except KeyboardInterrupt:
+            clear_lines(5)
+            return CTRL_C_SENTINEL
         if key == "\x1b[C":  # Right
             idx = 1
             clear_lines(5)
@@ -371,6 +373,17 @@ def generate_qr(
 
 
 # ── Interactive Mode (state machine with back support) ──
+def _confirm_quit() -> bool:
+    """Ask user if they want to quit. Returns True if quitting."""
+    try:
+        result = arrow_confirm("Quit QR-Bro?")
+    except KeyboardInterrupt:
+        return True  # double Ctrl+C → quit
+    if result is True or result == CTRL_C_SENTINEL:
+        return True
+    return False
+
+
 def interactive_mode():
     print(LOGO)
     data = ""
@@ -381,124 +394,134 @@ def interactive_mode():
     error = "H"
     step = 0  # current step index
 
-    while True:
-        if step == 0:
-            # ── Data ──
-            while True:
-                data = prompt_str("URL or text to encode", required=True)
-                if data:
-                    break
-            show_preview(data, ec=error)
-            step = 1
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    out = ""
+    show = False
 
-        elif step == 1:
-            # ── Color scheme (with live preview) ──
-            def color_preview(val):
-                if val == "8":
-                    return []
-                pr = COLOR_PRESETS[val]
-                return ascii_preview(PREVIEW_DATA, ec=error, color=pr[1])
+    try:
+        while True:
+            if step == 0:
+                # ── Data ──
+                while True:
+                    data = prompt_str("URL or text to encode", required=True)
+                    if data:
+                        break
+                show_preview(data, ec=error)
+                step = 1
 
-            presets_list = [(v[0], k) for k, v in COLOR_PRESETS.items()]
-            result = arrow_picker("Color scheme", presets_list, default=4,
-                                  preview_fn=color_preview)
-            if result == BACK_SENTINEL:
-                step = 0
-                continue
-            if result == "8":
-                color = prompt_hex("QR color", "#000000")
-                bg = prompt_hex("Background color", "#FFFFFF")
-            else:
-                preset = COLOR_PRESETS[result]
-                color, bg = preset[1], preset[2]
-            step = 2
-
-        elif step == 2:
-            # ── Logo ──
-            logo = prompt_str("Logo path (leave empty to skip)")
-            if logo:
-                sz = prompt_str("Logo size as % of QR", "25")
-                try:
-                    logo_size = int(sz)
-                except ValueError:
-                    print(f"  {YELLOW}warning{RESET} Invalid size, using 25%.")
-            step = 3
-
-        elif step == 3:
-            # ── Error correction (with live preview) ──
-            def ec_preview(val):
-                return ascii_preview(PREVIEW_DATA, ec=val)
-
-            ec_opts = [("Low (L)", "L"), ("Medium (M)", "M"),
-                       ("Quartile (Q)", "Q"), ("High (H)", "H")]
-            result = arrow_picker("Error correction level", ec_opts, default=4,
-                                  preview_fn=ec_preview)
-            if result == BACK_SENTINEL:
+            elif step == 1:
+                # ── QR color & background ──
+                color = prompt_hex("QR color (hex)", "#000000")
+                bg = prompt_hex("Background color (hex)", "#FFFFFF")
                 step = 2
-                continue
-            error = result
-            step = 4
 
-        elif step == 4:
-            # ── Output ──
-            default_out = os.path.expanduser("~/Downloads/qrcode.png")
-            out = prompt_str("Output filename", default_out)
-            if not out.endswith(".png"):
-                out += ".png"
-            step = 5
+            elif step == 2:
+                # ── Logo ──
+                logo = prompt_str("Logo path (leave empty to skip)")
+                if logo:
+                    sz = prompt_str("Logo size as % of QR", "25")
+                    try:
+                        logo_size = int(sz)
+                    except ValueError:
+                        print(f"  {YELLOW}warning{RESET} Invalid size, using 25%.")
+                step = 3
 
-        elif step == 5:
-            # ── Show image? ──
-            result = arrow_confirm("Open image after generation?", default=False)
-            if result == BACK_SENTINEL:
+            elif step == 3:
+                # ── Error correction (with live preview) ──
+                def ec_preview(val):
+                    return ascii_preview(PREVIEW_DATA, ec=val)
+
+                ec_opts = [("Low (L)", "L"), ("Medium (M)", "M"),
+                           ("Quartile (Q)", "Q"), ("High (H)", "H")]
+                result = arrow_picker("Error correction level", ec_opts, default=4,
+                                      preview_fn=ec_preview)
+                if result == BACK_SENTINEL:
+                    step = 2
+                    continue
+                if result == CTRL_C_SENTINEL:
+                    if _confirm_quit():
+                        print(f" {YELLOW}Bye.{RESET}")
+                        return
+                    continue
+                error = result
                 step = 4
-                continue
-            show = result
-            step = 6
 
-        elif step == 6:
-            # ── Summary & Confirm ──
-            ec_label = {"L": "Low", "M": "Medium", "Q": "Quartile", "H": "High"}
-            print(f"\n {DIM}{'─'*44}{RESET}")
-            print(f" {BOLD}Summary:{RESET}")
-            print(f"   Data:     {data}")
-            print(f"   QR color: {color}")
-            print(f"   BG color: {bg}")
-            print(f"   Logo:     {logo or '(none)'}")
-            print(f"   Error:    {ec_label.get(error, error)}")
-            print(f"   Output:   {out}")
-            print(f"   Open:     {'yes' if show else 'no'}")
-            show_preview(data, ec=error)
-            print(f" {DIM}{'─'*44}{RESET}")
-
-            result = arrow_confirm("Generate QR code?", default=True)
-            if result == BACK_SENTINEL:
+            elif step == 4:
+                # ── Output ──
+                default_out = os.path.expanduser("~/Downloads/qrcode.png")
+                out = prompt_str("Output filename", default_out)
+                if not out.endswith(".png"):
+                    out += ".png"
                 step = 5
-                continue
 
-            if result is False:
-                print(f"\n {YELLOW}Cancelled.{RESET}")
-                sys.exit(0)
+            elif step == 5:
+                # ── Show image? ──
+                result = arrow_confirm("Open image after generation?", default=False)
+                if result == BACK_SENTINEL:
+                    step = 4
+                    continue
+                if result == CTRL_C_SENTINEL:
+                    if _confirm_quit():
+                        print(f" {YELLOW}Bye.{RESET}")
+                        return
+                    continue
+                show = result
+                step = 6
 
-            # ── Generate ──
-            print(f"\n {DIM}Generating QR code...{RESET}")
-            try:
-                path = generate_qr(
-                    data=data,
-                    color=color,
-                    bg_color=bg,
-                    logo_path=logo or None,
-                    logo_size_pct=logo_size,
-                    output=out,
-                    error_correction=error,
-                    show=show,
-                )
-                print(f"\n {GREEN}{BOLD}✓ QR code generated!{RESET}")
-                print(f"   {path}\n")
-            except Exception as e:
-                print(f"\n {RED}error{RESET} {e}")
-                sys.exit(1)
-            break
+            elif step == 6:
+                # ── Summary & Confirm ──
+                ec_label = {"L": "Low", "M": "Medium", "Q": "Quartile", "H": "High"}
+                print(f"\n {DIM}{'─'*44}{RESET}")
+                print(f" {BOLD}Summary:{RESET}")
+                print(f"   Data:     {data}")
+                print(f"   QR color: {color}")
+                print(f"   BG color: {bg}")
+                print(f"   Logo:     {logo or '(none)'}")
+                print(f"   Error:    {ec_label.get(error, error)}")
+                print(f"   Output:   {out}")
+                print(f"   Open:     {'yes' if show else 'no'}")
+                show_preview(data, ec=error)
+                print(f" {DIM}{'─'*44}{RESET}")
+
+                result = arrow_confirm("Generate QR code?", default=True)
+                if result == BACK_SENTINEL:
+                    step = 5
+                    continue
+                if result == CTRL_C_SENTINEL:
+                    if _confirm_quit():
+                        print(f" {YELLOW}Bye.{RESET}")
+                        return
+                    continue
+
+                if result is False:
+                    print(f"\n {YELLOW}Cancelled.{RESET}")
+                    sys.exit(0)
+
+                # ── Generate ──
+                print(f"\n {DIM}Generating QR code...{RESET}")
+                try:
+                    path = generate_qr(
+                        data=data,
+                        color=color,
+                        bg_color=bg,
+                        logo_path=logo or None,
+                        logo_size_pct=logo_size,
+                        output=out,
+                        error_correction=error,
+                        show=show,
+                    )
+                    print(f"\n {GREEN}{BOLD}✓ QR code generated!{RESET}")
+                    print(f"   {path}\n")
+                except Exception as e:
+                    print(f"\n {RED}error{RESET} {e}")
+                    sys.exit(1)
+                break
+    except KeyboardInterrupt:
+        if _confirm_quit():
+            print(f" {YELLOW}Bye.{RESET}")
+        else:
+            # Go back to where we were — restart interactive
+            interactive_mode()
 
 
 # ── Direct Mode ──────────────────────────────────────────
