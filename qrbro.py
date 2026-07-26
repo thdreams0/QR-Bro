@@ -238,7 +238,7 @@ def arrow_confirm(label: str, default: bool = True) -> bool:
 # ── ASCII QR Preview ─────────────────────────────────────
 def ascii_preview(data: str, ec: str = "H", stride: int = 2, max_rows: int = 15,
                   color: str = None, **kwargs) -> list[str]:
-    """ASCII QR preview. ## for dark, spaces for light.
+    """ASCII QR preview. @@ for dark, spaces for light.
     If color is given, dark modules render in that color (ANSI fg).
     stride > 1 shrinks the preview (every Nth row/col)."""
     ec_map = {
@@ -268,7 +268,7 @@ def ascii_preview(data: str, ec: str = "H", stride: int = 2, max_rows: int = 15,
         row = ""
         for ci in range(0, len(modules[ri]), stride):
             if modules[ri][ci]:
-                row += f"{fc}##{rc}" if fc else "##"
+                row += f"{fc}@@{rc}" if fc else "@@"
             else:
                 row += "  "
         out.append(row)
