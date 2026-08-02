@@ -147,10 +147,27 @@ def prompt_str(label: str, default: str = "", required: bool = False) -> str:
 
 
 def prompt_hex(label: str, default: str) -> str:
-    val = input(f"  {BOLD}?{RESET} {label} {DIM}[{default}]:{RESET} ").strip()
-    if not val:
-        return default
-    return f"#{val.lstrip('#')}"
+    """Prompt for a hex color: 6 digits (with or without '#')."""
+    while True:
+        val = input(f"  {BOLD}?{RESET} {label} {DIM}[{default}]:{RESET} ").strip()
+        if not val:
+            return default
+        if val.startswith("#"):
+            if len(val) != 7:
+                print(f"  {RED}Invalid color{RESET} — with '#' it must have 7 chars (e.g. {DIM}#FF5733{RESET})")
+                continue
+            hex_part = val[1:]
+        else:
+            if len(val) != 6:
+                print(f"  {RED}Invalid color{RESET} — without '#' it must have 6 chars (e.g. {DIM}FF5733{RESET})")
+                continue
+            hex_part = val
+        try:
+            int(hex_part, 16)
+        except ValueError:
+            print(f"  {RED}Invalid color{RESET} — only hex chars 0-9 and A-F allowed")
+            continue
+        return f"#{hex_part.upper()}"
 
 
 def prompt_yesno(label: str, default: bool = True) -> bool:
